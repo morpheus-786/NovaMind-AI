@@ -22,7 +22,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Add a logo and title
-st.image(r'C:\Users\user\Pictures\download.jpg', width=200)
+st.image('images/download.jpg', width=200)
 st.title("Delv AI-like Web App")
 
 # Sidebar for file upload
