@@ -25,9 +25,11 @@ st.set_page_config(page_title="Delv AI", layout="wide", page_icon="🌟")
 names = ["John Doe", "Jane Smith"]
 usernames = ["johndoe", "janesmith"]
 passwords = ["123", "456"]  # Replace with hashed passwords
+cookie_expiry_days=30
 
+# Create Streamlit Authenticator
 authenticator = stauth.Authenticate(
-    names, usernames, passwords, "app_home", "random_key", cookie_expiry_days=30
+    names, usernames, passwords, "app_home", "random_key", 
 )
 
 name, authentication_status, username = authenticator.login("Login", "main")
