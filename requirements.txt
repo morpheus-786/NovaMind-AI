@@ -3,4 +3,4 @@ streamlit
 pandas
 plotly.express
 python-dotenv
-streamlit-authenticator==0.2.4
+streamlit-authenticator==0.3.3
