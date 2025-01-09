@@ -1,94 +1,112 @@
+# Import Libraries
 import streamlit as st
 import pandas as pd
-import openai
 import plotly.express as px
+import openai
 from dotenv import load_dotenv
 import os
+import sqlite3
+import streamlit_authenticator as stauth
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
-
-# Set up OpenAI API key (loaded from the .env file)
 openai.api_key = os.getenv("OPENAI_API_KEY")
 
-# Custom CSS styling
-st.markdown("""
-<style>
-.stButton>button {
-    background-color: #4CAF50;
-    color: white;
-}
-</style>
-""", unsafe_allow_html=True)
+# Initialize SQLite Database
+conn = sqlite3.connect('user_data.db')
+cursor = conn.cursor()
+cursor.execute('CREATE TABLE IF NOT EXISTS history (id INTEGER PRIMARY KEY, task TEXT, input TEXT, output TEXT)')
+conn.commit()
 
-# Add a logo and title
-st.image('images/download.jpg', width=200)
-st.title("Delv AI-like Web App")
+# Streamlit Configuration
+st.set_page_config(page_title="Delv AI", layout="wide", page_icon="🌟")
 
-# Sidebar for file upload
-st.sidebar.header("Upload Your Dataset")
-uploaded_file = st.sidebar.file_uploader("Upload a CSV or Excel file", type=["csv", "xlsx"])
+# Authentication
+names = ["John Doe", "Jane Smith"]
+usernames = ["johndoe", "janesmith"]
+passwords = ["123", "456"]  # Replace with hashed passwords
 
-if uploaded_file:
-    try:
-        # Read the dataset
-        if uploaded_file.name.endswith(".csv"):
+authenticator = stauth.Authenticate(
+    names, usernames, passwords, "app_home", "random_key", cookie_expiry_days=30
+)
+
+name, authentication_status, username = authenticator.login("Login", "main")
+
+if authentication_status:
+    st.sidebar.success(f"Welcome {name}!")
+
+    # Navigation
+    st.sidebar.title("Navigation")
+    task = st.sidebar.radio("Select a Task", ["Summarization", "Data Visualization", "History"])
+
+    # Summarization Feature
+    if task == "Summarization":
+        st.header("Summarize Text or File")
+        choice = st.radio("Input Type", ["Text", "Upload File"])
+
+        user_input = ""
+        if choice == "Text":
+            user_input = st.text_area("Enter text to summarize")
+        elif choice == "Upload File":
+            uploaded_file = st.file_uploader("Upload a text file", type=["txt"])
+            if uploaded_file:
+                user_input = uploaded_file.read().decode("utf-8")
+
+        if st.button("Summarize"):
+            if user_input:
+                response = openai.Completion.create(
+                    engine="text-davinci-003",
+                    prompt=f"Summarize this: {user_input}",
+                    max_tokens=150
+                )
+                summary = response.choices[0].text.strip()
+                st.success(summary)
+
+                # Save to Database
+                if st.button("Save Result"):
+                    cursor.execute("INSERT INTO history (task, input, output) VALUES (?, ?, ?)", ("Summarization", user_input, summary))
+                    conn.commit()
+                    st.success("Result saved to database!")
+            else:
+                st.warning("No input provided.")
+
+    # Data Visualization Feature
+    elif task == "Data Visualization":
+        st.header("Data Visualization")
+        uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
+
+        if uploaded_file:
             df = pd.read_csv(uploaded_file)
-        elif uploaded_file.name.endswith(".xlsx"):
-            df = pd.read_excel(uploaded_file)
+            st.write("Preview of Data:", df.head())
 
-        # Display dataset preview
-        st.write("### Dataset Preview")
-        st.dataframe(df)
+            chart_type = st.selectbox("Select Chart Type", ["Line", "Bar", "Scatter", "Pie"])
+            x_axis = st.selectbox("Choose X-axis", df.columns)
+            y_axis = st.selectbox("Choose Y-axis", df.columns)
 
-        # Show basic dataset statistics
-        st.write("### Summary Statistics")
-        st.write(df.describe())
+            if chart_type == "Line":
+                chart = px.line(df, x=x_axis, y=y_axis)
+            elif chart_type == "Bar":
+                chart = px.bar(df, x=x_axis, y=y_axis)
+            elif chart_type == "Scatter":
+                chart = px.scatter(df, x=x_axis, y=y_axis)
+            elif chart_type == "Pie":
+                chart = px.pie(df, names=x_axis, values=y_axis)
 
-        # AI Query Section
-        st.write("### Ask Questions About Your Data")
-        query = st.text_input("Enter your question:")
+            st.plotly_chart(chart)
 
-        if query:
-            try:
-                # Convert dataset to string for AI input
-                dataset_summary = df.head(5).to_string()
-                prompt = f"Here is a sample of the dataset:\n{dataset_summary}\n\nQuestion: {query}\nAnswer:"
+    # History Feature
+    elif task == "History":
+        st.header("Saved Results")
+        cursor.execute("SELECT * FROM history")
+        rows = cursor.fetchall()
 
-                # Use OpenAI GPT model to answer
-                with st.spinner('Waiting for AI response...'):
-                    response = openai.Completion.create(
-                        engine="text-davinci-003",
-                        prompt=prompt,
-                        max_tokens=150
-                    )
-                st.write("### AI Response")
-                st.write(response.choices[0].text.strip())
-            except Exception as e:
-                st.error(f"Error with AI response: {e}")
+        if rows:
+            for row in rows:
+                st.subheader(f"Task: {row[1]}")
+                st.write(f"Input: {row[2]}")
+                st.write(f"Output: {row[3]}")
+        else:
+            st.write("No history found.")
 
-        # Visualization Section
-        st.write("### Create Visualizations")
-        chart_type = st.selectbox("Select Chart Type", ["Scatter Plot", "Line Chart", "Bar Chart"])
-        x_axis = st.selectbox("Select X-Axis", df.columns)
-        y_axis = st.selectbox("Select Y-Axis", df.columns)
-
-        if st.button("Generate Chart"):
-            try:
-                if chart_type == "Scatter Plot":
-                    fig = px.scatter(df, x=x_axis, y=y_axis, title="Scatter Plot")
-                elif chart_type == "Line Chart":
-                    fig = px.line(df, x=x_axis, y=y_axis, title="Line Chart")
-                elif chart_type == "Bar Chart":
-                    fig = px.bar(df, x=x_axis, y=y_axis, title="Bar Chart")
-                st.plotly_chart(fig)
-            except Exception as e:
-                st.error(f"Error generating chart: {e}")
-    except Exception as e:
-        st.error(f"Error loading dataset: {e}")
 else:
-    st.write("Please upload a dataset to get started.")
-
-# Footer
-st.markdown("<hr>", unsafe_allow_html=True)
-st.markdown("**Contact Us:** info@yourcompany.com")
+    st.sidebar.error("Invalid credentials")
